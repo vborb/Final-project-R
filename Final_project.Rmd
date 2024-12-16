@@ -1,0 +1,413 @@
+---
+title: "Final project"
+author: "Borbala Varga"
+date: "2024-12-15"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(skimr)
+library(tidytuesdayR)
+library(haven)
+library(tidyverse)
+library(openxlsx)
+library(janitor)
+library(gridExtra)
+library(car)
+library(lm.beta)
+library(broom)
+library(lme4)
+library(lmtest)
+library(performance)
+library(knitr)
+
+```
+
+## Research questions
+
+The aim of this research is to evaluate the presence of women in the field of astronauts, focusing on questions: 1. are they better represented in later years 2. what rank do they obtain 3. what differences can be seen among nations in this regard
+
+The data was part of TidyTuesday (2020-07-14), original data: https://github.com/rfordatascience/tidytuesday/blob/main/data/2020/2020-07-14/astronauts.csv
+
+```{r}
+#Loading & initial cleaning of the data set, the unknown values has been already handled by the uploader of the data set as was reported on the TidyTuesday page
+
+
+astronauts <- read_csv("https://github.com/rfordatascience/tidytuesday/raw/refs/heads/main/data/2020/2020-07-14/astronauts.csv") %>% 
+  clean_names()
+
+
+glimpse(astronauts)
+
+```
+
+
+```{r}
+
+cat("The data set starts with the first human in space, Yuri Gagarin in", min(astronauts$year_of_mission), "and ends in", max(astronauts$year_of_mission), "which time frame contains", max(astronauts$number), "person who has been in space, in total", max(astronauts$id), "number of space travels.")
+
+```
+
+## Exploratory data analysis
+
+### Preparing data
+
+Searching and eliminating coding errors are necessary for variables which are relevant for the research, 'occupation' needed a revision.
+
+```{r}
+
+# Creating a table where every astronaut is represented only once
+
+astronauts_by_ppl <- astronauts %>%
+  group_by(name) %>% 
+  slice(1)
+
+
+# Checking the variables we are mostly interested in: 
+# 1. Occupation
+
+table(astronauts_by_ppl$occupation)
+
+# Cleaning 'occupation' for coding errors
+
+astronauts_by_ppl_corr <- astronauts_by_ppl %>%
+  
+  mutate(occupation = case_when(
+    occupation == "Flight engineer" ~ "flight engineer",
+    occupation == "Other (Journalist)" ~ "journalist",
+    occupation == "Other (Space tourist)" ~ "space tourist",
+    occupation == "Other (space tourist)" ~ "space tourist",
+    occupation == "Space tourist" ~ "space tourist",
+    occupation == "Pilot" ~ "pilot",
+    TRUE ~ occupation 
+  ))
+ 
+table(astronauts_by_ppl_corr$occupation)
+
+
+# 2. Organisations of the space expeditions ('selection')
+
+head(table(astronauts_by_ppl$selection))
+tail(table(astronauts_by_ppl$selection))
+
+
+# The 'selection' column has been organised according to the location of the organisation, external information sources (e.g. Wikipedia) have been used to decide not evident cases
+
+astronauts_by_ppl_corr <- astronauts_by_ppl_corr %>%
+  
+  mutate(selection = ifelse(str_detect(selection, "NASA"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "Teacher"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "NASA"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "States"), "U.S.", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "Juno"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "ATLAS"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "PS"), "U.S.", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "Congress"), "U.S.", selection))%>%
+    mutate(selection = ifelse(str_detect(selection, "Spacelab"), "U.S.", selection))%>%
+  mutate(selection = ifelse(str_detect(selection, "Terra"), "U.S.", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "USAF"), "U.S.", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "TsPK"), "U.S.S.R./Russia", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "VVS"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "LII"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "Voskhod"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "NPOE"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "osmos"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "IMBP"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "USSR"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "RKKE"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "AMN"), "U.S.S.R./Russia", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "TsKBEM"), "U.S.S.R./Russia", selection)) %>%    
+   mutate(selection = ifelse(str_detect(selection, "MKS"), "U.S.S.R./Russia", selection)) %>%    
+   mutate(selection = ifelse(str_detect(selection, "MAP"), "U.S.S.R./Russia", selection)) %>%    
+   mutate(selection = ifelse(str_detect(selection, "Politician"), "U.S.S.R./Russia", selection)) %>%
+   mutate(selection = ifelse(str_detect(selection, "Kazak"), "Kazakhstan", selection)) %>%
+  mutate(selection = ifelse(str_detect(selection, "Kzazkh"), "Kazakhstan", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "NASDA"), "Japan", selection)) %>%    
+  mutate(selection = ifelse(str_detect(selection, "TBS"), "Japan", selection)) %>%
+     mutate(selection = ifelse(str_detect(selection, "JAXA"), "Japan", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "EAC"), "E.U.", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "ESA"), "E.U.", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "China"), "China", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "CNES"), "France", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "CSA"), "Canada", selection)) %>%
+     mutate(selection = ifelse(str_detect(selection, "NRC"), "Canada", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "DLR"), "Germany", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "Tourist"), "Tourists", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "Mir"), "Tourists", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "N/A"), "Tourists", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "MBRSC"), "UAE", selection)) %>%
+    mutate(selection = ifelse(str_detect(selection, "Angkasawan"), "Malaysia", selection))
+  
+table(astronauts_by_ppl_corr$selection)
+
+
+# 3. Nationality 
+
+table(astronauts_by_ppl_corr$nationality)
+
+# There are 3 double citizens whose nationality is going to be changed based on their chosen nation (info obtained from Wikipedia)
+
+double_nat <- astronauts_by_ppl_corr %>%
+  filter(nationality == "U.K./U.S.") %>%
+  select(name)
+
+double_nat
+
+astronauts_by_ppl_corr <- astronauts_by_ppl_corr %>%
+  mutate(nationality = if_else(nationality == "U.K./U.S.", "U.S.", nationality))
+
+# Two countries' name are misspelled
+
+astronauts_by_ppl_corr <- astronauts_by_ppl_corr %>%
+  mutate(nationality = if_else(nationality == "Hungry", "Hungary", nationality)) %>%
+  mutate(nationality = if_else(nationality == "Malysia", "Malaysia", nationality)) 
+
+
+```
+
+### Discovering trends using plots
+
+Number of women present per year -
+
+```{r}
+# Subgroups for seeing trends between male vs. female astronauts
+
+table(astronauts_by_ppl$sex) # there is no coding error
+
+astronauts_woman <- astronauts_by_ppl_corr %>%
+  filter(sex == "female")
+
+astronauts_man <- astronauts_by_ppl_corr %>%
+  filter(sex == "male")
+
+
+# First woman in space
+
+first_woman <- astronauts_woman %>% filter(year_of_selection == min(astronauts_woman$year_of_selection)) %>% select(name)
+
+first_woman_date <- astronauts_woman %>% filter(name == first_woman) %>% ungroup() %>% select(year_of_selection)
+
+
+# Plots
+
+plot_sex_year <- ggplot(astronauts_by_ppl_corr, aes(x = year_of_mission, fill = sex)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Number of women & men per year") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), legend.title = element_blank())
+
+plot_women_year <- ggplot(astronauts_woman, aes(x = year_of_mission)) +
+  geom_bar(fill = "indianred1") +
+  labs(title = "Number of women per year") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), legend.title = element_blank())
+
+grid.arrange(plot_sex_year, plot_women_year, ncol = 2)
+
+
+cat("There have been", sum(astronauts_by_ppl$sex == "female"), "women, and", sum(astronauts_by_ppl$sex == "male"), "men astronauts, both professional and tourists.")
+
+
+cat("In the plots above it is visible, that except from the first woman in space,", as.character(first_woman), "in", as.character(first_woman_date), "women have been represented in the field from ~1980, but still fairly unevenly, and there is no visible trend in terms of  women being more represented with time.")
+
+```
+
+Differences between men & women in occupation and total numbers of hours spent in space -
+
+```{r}
+
+plot_men_occ <- ggplot(astronauts_by_ppl_corr, aes(x = occupation, y = total_hrs_sum, color = sex, alpha = ifelse(sex == "male", 0, 1))) +
+  geom_point() +
+  labs(title = "Occupation Determines Time Spent in Space",
+       x = "Occupation",
+       y = "Hours spent in space",
+       color = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(alpha = FALSE)
+
+plot_women_occ <- ggplot(astronauts_woman, aes(x = occupation, y = total_hrs_sum)) +
+  geom_point(color = "indianred1") +
+  labs(title = "",
+       x = "",
+       y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(plot_men_occ, plot_women_occ, ncol = 2)
+
+
+cat("There is no woman commander, nor journalist, the distribution of the rest of the occupations seems similarly distributed to men's occupation.\nHours spent in space seems much less than men's data.")
+```
+
+Numbers of nationalities represented in space -
+
+```{r}
+# Nationalities grouped by continents
+
+astronauts_by_ppl_corr <- astronauts_by_ppl_corr %>%
+  mutate(continent = case_when(
+    nationality %in% c("France", "Germany", "Italy", "U.K.", "Russia", "Austria", "Denmark", "Czechoslovakia", "Bulgaria", "Belgium", "Spain", "Romania", "Slovakia", "Netherland", "Sweden", "Switzerland", "U.S.S.R/Ukraine", "Hungary", "Poland") ~ "Europe",
+    nationality %in% c("Cuba", "Mexico", "Brazil", "Canada") ~ "Non-US America",
+    nationality %in% c("U.S.") ~ "US America",
+    nationality %in% c("China", "Japan", "India", "Korea", "Vietnam", "Syria", "Mongolia", "Malaysia", "Korea", "Israel", "UAE", "Afghanistan", "Kazakhstan") ~ "Asia",
+    nationality %in% c("Republic of South Africa", "Saudi Arabia") ~ "Africa",
+    nationality %in% c("Australia") ~ "Australia",
+    nationality %in% c("U.S.S.R/Russia") ~ "U.S.S.R/Russia",
+    TRUE ~ "Other"
+  ))
+
+
+# Plots
+
+nationalities_per_year <- astronauts_by_ppl_corr %>%
+  count(year_of_selection, continent)
+
+ggplot(nationalities_per_year, aes(x = year_of_selection, y = n, fill = continent)) +
+  geom_histogram(stat = "identity", position = "stack") +
+  labs(
+    title = "Number of Nationalities by Year & Continent",
+    x = "Year of selection",
+    y = "Number of nationalities represented",
+    fill = "Continents") 
+
+ggplot(astronauts_by_ppl_corr, aes(x = selection, y = nationality, color = continent)) +
+  geom_point() +
+  labs(title = "Nationalities Represented by Organisations",
+       x = "Organisations based on countries",
+       y = "Nationality of the astronauts",
+       color = "Continents") +
+    theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+
+cat("The trend for different nationalities being represented seems similar for the previous data on women, both starting around 1980. With the decline of interest in space travels around 2000 these trends seem to fade as well.\nEU and the majority of the nations represent their own people in space. Exceptions are US and USSR/Russia, who gave opportunities to participants from more countries, supposedly as for USSR/Russia these are based mostly on past soviet connections.")
+
+```
+
+## Data analysis
+
+### Building the model
+
+Based on the explanatory data analysis a question arose: is there a connection between women being present in the field of astronauts and men and also different nations being present?
+
+```{r}
+# Creating a table for the necessary data:
+
+summary_data <- astronauts_by_ppl_corr %>%
+  group_by(year_of_selection, nationality, sex) %>%
+  summarise(count = n()) %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0))
+
+nationality_nr <- summary_data %>%
+  group_by(year_of_selection) %>%
+  summarise(nationality_nr = n_distinct(nationality))
+
+merged_data <- summary_data %>%
+  left_join(nationality_nr, by = "year_of_selection")
+
+merged_data
+
+# and a multiple linear regression model:
+
+model <- lm(female ~ male + nationality_nr, data = merged_data)
+
+```
+
+### Influential outliers
+
+Using Cook's Distance Test it is obvious, that all the points are below 1, thus there are no influential outliers.
+
+```{r}
+
+cooks_dist <- cooks.distance(model)
+
+plot(cooks_dist)
+
+cooks.distance(model)[which.max(cooks.distance(model))]
+
+```
+
+### Assumptions
+
+Normality. Shapiro-Wilk normality test shows that the data is not normally distributed (p < 0.001), which means that a transformation of the data is necessary.
+
+```{r}
+
+residuals <- rstandard(model)
+
+shapiro.test(residuals)
+
+ggplot() +
+  geom_qq(aes(sample = residuals)) +
+  geom_abline(color = "red") +
+  coord_fixed()
+
+```
+
+Correcting for non-normal distribution - with log transformation. The results show that this transformation was not enough for correcting for non-normality, and the results should be handled with caution!
+
+```{r}
+female_log  <- log(merged_data$female + 1)  
+
+model_log <- lm(female_log ~ male + nationality_nr, data = merged_data)
+
+residuals_log <- residuals(model_log)
+
+shapiro.test(residuals_log)
+
+ggplot() +
+  geom_qq(aes(sample = residuals_log)) +
+  geom_abline(color = "red") +
+  coord_fixed()
+
+```
+
+Linearity. Linearity assumption is slightly violated where the numbers of 'male' is low.
+
+```{r}
+residuals_fitted <- merged_data %>%
+  ungroup()%>%
+  mutate(fitted = fitted(model_log))
+
+linearity_male <- ggplot(residuals_fitted, aes(male, residuals_log)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red") +
+  geom_smooth()
+
+linearity_nat <- ggplot(residuals_fitted, aes(nationality_nr, residuals_log)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red") +
+  geom_smooth()
+
+grid.arrange(linearity_male, linearity_nat, nrow = 2)
+
+```
+
+Homogeneity of variance. Sine the Breusch-Pagan Test resulted with a p ~ 0.001, heteroscedasticity is evident in the model, even when log transformed. This means, that the variance of the residuals are not constant, and further steps needed to be taken.
+
+```{r}
+
+ncvTest(model_log)
+
+```
+
+Multicolinearity assumption. Since all the results are below 3, there is no multicolinearity present in the model.
+
+```{r}
+vif(model_log)
+
+```
+
+### Results
+The results show significant connection between women and men being present in the field, but not the variability of nations being present.
+
+```{r}
+
+summary(model)
+
+```
+
+## Conclucion
+
+Since all the assumptions of linear regressions (except for multilinearity) have been violated, even though the results show p<0.001 significant correlation between women and men being present in the field, this result should be handled with caution, and a more robust model would be needed to give a certain result.
+
+
